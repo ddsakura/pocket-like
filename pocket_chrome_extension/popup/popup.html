@@ -1,0 +1,31 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Pocket MVP</title>
+  <style>
+    body { font-family: sans-serif; width: 320px; padding: 10px; }
+    #bookmark-list { max-height: 300px; overflow-y: auto; }
+    .bookmark {
+      max-height: 100px;
+      overflow: hidden;
+      padding-bottom: 4px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #ccc;
+    }
+    .bookmark h4 {
+      font-size: 14px;
+      margin: 4px 0;
+    }
+    hr { border: 0; border-top: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <input type="text" id="search-box" placeholder="搜尋書籤..." style="width:100%" />
+  <button id="save-button">儲存目前頁面</button>
+  <button id="sync-button">同步</button>
+  <div id="bookmark-list"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Pocket MVP - Clean 100px",
+  "version": "1.4",
+  "description": "簡潔固定高度 UI，支援搜尋與匯出",
+  "permissions": [
+    "storage",
+    "tabs",
+    "downloads"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": "icon.png"
+  }
+}

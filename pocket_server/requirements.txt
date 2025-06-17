@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+sqlite-utils
+chromadb
+click
+pydantic
+requests
+python-multipart
