@@ -131,11 +131,24 @@ async def index_page():
             .bookmark { margin-bottom: 1.5em; padding-bottom: 1em; border-bottom: 1px solid #ccc; }
             .url { font-size: 0.9em; color: gray; }
             .tags { font-size: 0.9em; color: #007bff; }
+            button.tag {
+                background-color: #007bff;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 2px 6px;
+                margin: 0 2px 2px 0;
+                cursor: pointer;
+                font-size: 0.9em;
+            }
+            button.tag:hover {
+                background-color: #0056b3;
+            }
         </style>
     </head>
     <body>
         <h1>My Bookmarks</h1>
-        <input type="text" id="search" placeholder="Search bookmarks..."/>
+        <input type="text" id="searchInput" placeholder="Search bookmarks..."/>
         <div id="results"></div>
 
         <script>
@@ -148,24 +161,33 @@ async def index_page():
             }
 
             function render(list) {
-                const q = document.getElementById("search").value.toLowerCase();
+                const q = document.getElementById("searchInput").value.toLowerCase();
                 const filtered = list.filter(b =>
                     b.title.toLowerCase().includes(q) ||
                     (b.excerpt || '').toLowerCase().includes(q) ||
                     (b.tags || '').toLowerCase().includes(q)
                 );
                 const results = document.getElementById("results");
-                results.innerHTML = filtered.map(b => `
+                results.innerHTML = filtered.map(b => {
+                    let tagsHtml = '';
+                    if (b.tags) {
+                        const tagsArray = b.tags.split(',').map(t => t.trim());
+                        tagsHtml = tagsArray.map(tag => 
+                            `<button class="tag" onclick="document.getElementById('searchInput').value='${tag}'; document.getElementById('searchInput').dispatchEvent(new Event('input'));">${tag}</button>`
+                        ).join('');
+                    }
+                    return `
                     <div class="bookmark">
                         <div><strong>${b.title}</strong></div>
                         <div class="url"><a href="${b.url}" target="_blank" rel="noopener noreferrer">${b.url}</a></div>
                         <div>${b.excerpt || ''}</div>
-                        <div class="tags">${b.tags || ''}</div>
+                        <div class="tags">${tagsHtml}</div>
                     </div>
-                `).join('');
+                    `;
+                }).join('');
             }
 
-            document.getElementById("search").addEventListener("input", () => render(bookmarks));
+            document.getElementById("searchInput").addEventListener("input", () => render(bookmarks));
             fetchBookmarks();
         </script>
     </body>
