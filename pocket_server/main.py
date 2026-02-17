@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -47,12 +48,7 @@ chroma_client = chromadb.PersistentClient(path="./chroma")
 collection = chroma_client.get_or_create_collection("bookmarks")
 
 
-# 定義 POST 方法的 /sync API 路由，負責接收書籤同步的請求
-@app.post("/sync")
-async def sync_bookmarks(payload: List[BookmarkItem]):
-    if not isinstance(payload, list) or not payload:
-        return {"success": False, "message": "書籤列表為空或格式不正確"}
-
+def ensure_bookmarks_schema():
     if "bookmarks" not in db.table_names():
         db["bookmarks"].create(
             {
@@ -60,7 +56,8 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
                 "url": "TEXT",
                 "title": "TEXT",
                 "excerpt": "TEXT",
-                "tags": "TEXT"
+                "tags": "TEXT",
+                "created_at": "TEXT",
             },
             pk="id")
     else:
@@ -72,6 +69,17 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
             table.add_column("excerpt", "TEXT")
         if "tags" not in columns:
             table.add_column("tags", "TEXT")
+        if "created_at" not in columns:
+            table.add_column("created_at", "TEXT")
+
+
+# 定義 POST 方法的 /sync API 路由，負責接收書籤同步的請求
+@app.post("/sync")
+async def sync_bookmarks(payload: List[BookmarkItem]):
+    if not isinstance(payload, list) or not payload:
+        return {"success": False, "message": "書籤列表為空或格式不正確"}
+
+    ensure_bookmarks_schema()
 
     saved = []
 
@@ -92,6 +100,7 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
 
         id = item.id or str(uuid.uuid4())
         id = str(id)
+        created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         # 將資料寫入 SQLite 資料庫（upsert by id）
         db["bookmarks"].upsert(
@@ -100,7 +109,8 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
                 "url": str(url),
                 "title": str(title),
                 "excerpt": str(excerpt),
-                "tags": tags_json  # 確保為字串並且重新序列化 tags
+                "tags": tags_json,  # 確保為字串並且重新序列化 tags
+                "created_at": created_at
             },
             pk="id")
 
@@ -113,7 +123,8 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
                           metadatas=[{
                               "url": url,
                               "title": title,
-                              "tags": json.dumps(tags)
+                              "tags": json.dumps(tags),
+                              "created_at": created_at
                           }])
 
         saved.append(id)
@@ -130,8 +141,10 @@ async def index_page():
 # 書籤資料 API，回傳 id、url、title、excerpt、tags
 @app.get("/bookmarks")
 async def get_bookmarks():
+    ensure_bookmarks_schema()
     rows = []
-    for row in db["bookmarks"].rows:
+    for row in db["bookmarks"].rows_where("1=1",
+                                          order_by="created_at desc, rowid desc"):
         # tags 欄位可能是 JSON 字串，轉為逗號分隔字串
         tags = row.get("tags", "")
         if isinstance(tags, str):
@@ -146,6 +159,7 @@ async def get_bookmarks():
             "url": row.get("url"),
             "title": row.get("title"),
             "excerpt": row.get("excerpt", ""),
-            "tags": tags
+            "tags": tags,
+            "created_at": row.get("created_at")
         })
     return JSONResponse(rows)
