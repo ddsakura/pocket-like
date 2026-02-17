@@ -16,9 +16,10 @@
 - 🔍 使用向量資料庫進行高效全文搜尋
 - 🏷️ 支援標籤分類和管理
 - 🤖 使用 Ollama 模型自動生成標籤推薦
-- 📱 簡潔且固定高度的使用者介面
+- 📱 現代化卡片式 Web UI（支援搜尋、標籤篩選、長文字截斷與 tooltip）
 - 📊 本地 Web 界面查看和搜尋所有書籤
 - 💾 使用 SQLite 和 Chroma 向量資料庫進行持久化存儲
+- 🕒 書籤支援 `created_at` 時間欄位並可依時間排序
 
 ## 安裝說明
 
@@ -94,6 +95,62 @@ python -m cli suggest-tags "標題" "摘要"                # 使用 Ollama 模�
 
 開啟瀏覽器訪問 http://localhost:8000 查看和搜尋所有書籤。
 
+## Web UI 與排序更新
+
+### Web UI 檔案位置
+
+- `pocket_server/templates/index.html` - 頁面骨架
+- `pocket_server/static/css/app.css` - 介面樣式
+- `pocket_server/static/js/app.js` - 前端互動邏輯
+
+### `created_at` 欄位與排序規則
+
+- SQLite `bookmarks` 表已新增 `created_at`（TEXT, ISO-8601 UTC）。
+- 後端在 `/sync`、`/bookmarks` 會自動執行 schema 檢查與非破壞式 migration：
+  - 若 `created_at` 不存在，會自動 `ADD COLUMN`。
+  - 不會刪除或覆寫既有資料。
+- 新同步進來的書籤會自動寫入 `created_at`。
+- `/bookmarks` API 目前排序：`ORDER BY created_at DESC, rowid DESC`（新到舊）。
+
+### 舊資料 Backfill（可選）
+
+如果你希望舊資料也有可排序時間，可執行一次性 backfill。以下為目前採用的策略：
+
+- 僅更新 `created_at IS NULL` 的資料
+- 依 `rowid` 先後補上遞增時間（用於排序，不代表真實收藏時間）
+
+可直接使用下列一次性 Python 腳本進行 backfill：
+
+```bash
+cd pocket_server
+python - <<'PY'
+import sqlite3
+from datetime import datetime, timezone, timedelta
+
+conn = sqlite3.connect("bookmarks.db")
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+
+rows = cur.execute(
+    """
+    SELECT rowid
+    FROM bookmarks
+    WHERE created_at IS NULL OR created_at = ''
+    ORDER BY rowid ASC
+    """
+).fetchall()
+
+base = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+for i, row in enumerate(rows):
+    ts = (base + timedelta(seconds=i)).isoformat(timespec="seconds")
+    cur.execute("UPDATE bookmarks SET created_at = ? WHERE rowid = ?", (ts, row["rowid"]))
+
+conn.commit()
+print(f"backfilled={len(rows)}")
+conn.close()
+PY
+```
+
 ## 技術棧
 
 - **前端**: HTML, CSS, JavaScript (Chrome 擴充功能)
@@ -113,11 +170,13 @@ python -m cli suggest-tags "標題" "摘要"                # 使用 Ollama 模�
 
 ### pocket_server/
 
-- `main.py` - FastAPI 服務器，處理 API 請求
+- `main.py` - FastAPI 服務器，處理 API 請求、schema migration 與資料排序
 - `cli.py` - 命令行工具，提供本地操作功能，包括搜尋、內容擷取和自動標籤生成
 - `requirements.txt` - Python 依賴列表
 - `bookmarks.db` - SQLite 數據庫文件（自動創建）
 - `chroma/` - Chroma 向量資料庫存儲目錄
+- `templates/` - Web UI HTML 模板
+- `static/` - Web UI 靜態資源（CSS/JS）
 
 ### readability/
 
@@ -148,3 +207,4 @@ python -m cli suggest-tags "標題" "摘要"                # 使用 Ollama 模�
 - Chrome 擴充功能同步時會連接 Python 伺服器
 - CLI 命令使用 kebab-case 命名規範（例如 `backfill-excerpts` 而非 `backfill_excerpts`）
 - 使用標籤生成功能前需確保 Ollama 已安裝並拉取必要的模型
+- Web UI 預設透過 Google Fonts CDN 載入字型；若有隱私或離線需求，建議改為自託管字型

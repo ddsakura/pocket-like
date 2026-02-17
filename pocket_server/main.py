@@ -1,10 +1,13 @@
 import json
 import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
 import chromadb
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlite_utils import Database
 
@@ -31,6 +34,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 # 初始化 SQLite 資料庫，使用 sqlite_utils 方便操作 SQLite，資料庫檔案為 bookmarks.db
 db = Database("bookmarks.db")
 
@@ -42,12 +50,7 @@ chroma_client = chromadb.PersistentClient(path="./chroma")
 collection = chroma_client.get_or_create_collection("bookmarks")
 
 
-# 定義 POST 方法的 /sync API 路由，負責接收書籤同步的請求
-@app.post("/sync")
-async def sync_bookmarks(payload: List[BookmarkItem]):
-    if not isinstance(payload, list) or not payload:
-        return {"success": False, "message": "書籤列表為空或格式不正確"}
-
+def ensure_bookmarks_schema():
     if "bookmarks" not in db.table_names():
         db["bookmarks"].create(
             {
@@ -55,7 +58,8 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
                 "url": "TEXT",
                 "title": "TEXT",
                 "excerpt": "TEXT",
-                "tags": "TEXT"
+                "tags": "TEXT",
+                "created_at": "TEXT",
             },
             pk="id")
     else:
@@ -67,6 +71,17 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
             table.add_column("excerpt", "TEXT")
         if "tags" not in columns:
             table.add_column("tags", "TEXT")
+        if "created_at" not in columns:
+            table.add_column("created_at", "TEXT")
+
+
+# 定義 POST 方法的 /sync API 路由，負責接收書籤同步的請求
+@app.post("/sync")
+async def sync_bookmarks(payload: List[BookmarkItem]):
+    if not isinstance(payload, list) or not payload:
+        return {"success": False, "message": "書籤列表為空或格式不正確"}
+
+    ensure_bookmarks_schema()
 
     saved = []
 
@@ -87,6 +102,13 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
 
         id = item.id or str(uuid.uuid4())
         id = str(id)
+        existing_rows_by_id = list(db["bookmarks"].rows_where("id = ?", [id]))
+        existing_created_at = (
+            existing_rows_by_id[0].get("created_at")
+            if existing_rows_by_id else None
+        )
+        created_at = existing_created_at or datetime.now(
+            timezone.utc).isoformat(timespec="seconds")
 
         # 將資料寫入 SQLite 資料庫（upsert by id）
         db["bookmarks"].upsert(
@@ -95,7 +117,8 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
                 "url": str(url),
                 "title": str(title),
                 "excerpt": str(excerpt),
-                "tags": tags_json  # 確保為字串並且重新序列化 tags
+                "tags": tags_json,  # 確保為字串並且重新序列化 tags
+                "created_at": created_at
             },
             pk="id")
 
@@ -108,7 +131,8 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
                           metadatas=[{
                               "url": url,
                               "title": title,
-                              "tags": json.dumps(tags)
+                              "tags": json.dumps(tags),
+                              "created_at": created_at
                           }])
 
         saved.append(id)
@@ -117,89 +141,21 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
 
 
 # 前端瀏覽頁面，提供搜尋功能
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def index_page():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8" />
-        <title>Bookmarks Viewer</title>
-        <style>
-            body { font-family: sans-serif; margin: 2em; }
-            input { width: 300px; padding: 0.5em; margin-bottom: 1em; }
-            .bookmark { margin-bottom: 1.5em; padding-bottom: 1em; border-bottom: 1px solid #ccc; }
-            .url { font-size: 0.9em; color: gray; }
-            .tags { font-size: 0.9em; color: #007bff; }
-            button.tag {
-                background-color: #007bff;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                padding: 2px 6px;
-                margin: 0 2px 2px 0;
-                cursor: pointer;
-                font-size: 0.9em;
-            }
-            button.tag:hover {
-                background-color: #0056b3;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>My Bookmarks</h1>
-        <input type="text" id="searchInput" placeholder="Search bookmarks..."/>
-        <div id="results"></div>
-
-        <script>
-            let bookmarks = [];
-
-            async function fetchBookmarks() {
-                const res = await fetch('/bookmarks');
-                bookmarks = await res.json();
-                render(bookmarks);
-            }
-
-            function render(list) {
-                const q = document.getElementById("searchInput").value.toLowerCase();
-                const filtered = list.filter(b =>
-                    b.title.toLowerCase().includes(q) ||
-                    (b.excerpt || '').toLowerCase().includes(q) ||
-                    (b.tags || '').toLowerCase().includes(q)
-                );
-                const results = document.getElementById("results");
-                results.innerHTML = filtered.map(b => {
-                    let tagsHtml = '';
-                    if (b.tags) {
-                        const tagsArray = b.tags.split(',').map(t => t.trim());
-                        tagsHtml = tagsArray.map(tag => 
-                            `<button class="tag" onclick="document.getElementById('searchInput').value='${tag}'; document.getElementById('searchInput').dispatchEvent(new Event('input'));">${tag}</button>`
-                        ).join('');
-                    }
-                    return `
-                    <div class="bookmark">
-                        <div><strong>${b.title}</strong></div>
-                        <div class="url"><a href="${b.url}" target="_blank" rel="noopener noreferrer">${b.url}</a></div>
-                        <div>${b.excerpt || ''}</div>
-                        <div class="tags">${tagsHtml}</div>
-                    </div>
-                    `;
-                }).join('');
-            }
-
-            document.getElementById("searchInput").addEventListener("input", () => render(bookmarks));
-            fetchBookmarks();
-        </script>
-    </body>
-    </html>
-    """
+    return FileResponse(BASE_DIR / "templates" / "index.html")
 
 
 # 書籤資料 API，回傳 id、url、title、excerpt、tags
 @app.get("/bookmarks")
 async def get_bookmarks():
+    ensure_bookmarks_schema()
     rows = []
-    for row in db["bookmarks"].rows:
+    for row in db["bookmarks"].rows_where(
+            "1=1",
+            order_by=(
+                "COALESCE(created_at, '1970-01-01T00:00:00+00:00') "
+                "desc, rowid desc")):
         # tags 欄位可能是 JSON 字串，轉為逗號分隔字串
         tags = row.get("tags", "")
         if isinstance(tags, str):
@@ -214,6 +170,7 @@ async def get_bookmarks():
             "url": row.get("url"),
             "title": row.get("title"),
             "excerpt": row.get("excerpt", ""),
-            "tags": tags
+            "tags": tags,
+            "created_at": row.get("created_at")
         })
     return JSONResponse(rows)

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pocket-Like Bookmarks</title>
+    <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+    <main class="shell">
+        <section class="hero">
+            <h1 class="title">My Reading Vault</h1>
+            <p class="subtitle">收藏、搜尋、用標籤快速回到你最重要的內容。</p>
+
+            <div class="search-wrap">
+                <input type="text" id="searchInput" aria-label="搜尋標題、摘要或標籤" placeholder="搜尋標題、摘要或標籤..." />
+                <button class="clear-btn" id="clearBtn" type="button">清除</button>
+            </div>
+
+            <div class="stats">
+                <span class="stat-chip" id="totalCount">共 0 筆</span>
+                <span class="stat-chip" id="shownCount">顯示 0 筆</span>
+            </div>
+        </section>
+
+        <section class="grid" id="results"></section>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
