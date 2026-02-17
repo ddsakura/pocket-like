@@ -119,6 +119,38 @@ python -m cli suggest-tags "標題" "摘要"                # 使用 Ollama 模�
 - 僅更新 `created_at IS NULL` 的資料
 - 依 `rowid` 先後補上遞增時間（用於排序，不代表真實收藏時間）
 
+可直接使用下列一次性 Python 腳本進行 backfill：
+
+```bash
+cd pocket_server
+python - <<'PY'
+import sqlite3
+from datetime import datetime, timezone, timedelta
+
+conn = sqlite3.connect("bookmarks.db")
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+
+rows = cur.execute(
+    """
+    SELECT rowid
+    FROM bookmarks
+    WHERE created_at IS NULL OR created_at = ''
+    ORDER BY rowid ASC
+    """
+).fetchall()
+
+base = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+for i, row in enumerate(rows):
+    ts = (base + timedelta(seconds=i)).isoformat(timespec="seconds")
+    cur.execute("UPDATE bookmarks SET created_at = ? WHERE rowid = ?", (ts, row["rowid"]))
+
+conn.commit()
+print(f"backfilled={len(rows)}")
+conn.close()
+PY
+```
+
 ## 技術棧
 
 - **前端**: HTML, CSS, JavaScript (Chrome 擴充功能)
@@ -175,3 +207,4 @@ python -m cli suggest-tags "標題" "摘要"                # 使用 Ollama 模�
 - Chrome 擴充功能同步時會連接 Python 伺服器
 - CLI 命令使用 kebab-case 命名規範（例如 `backfill-excerpts` 而非 `backfill_excerpts`）
 - 使用標籤生成功能前需確保 Ollama 已安裝並拉取必要的模型
+- Web UI 預設透過 Google Fonts CDN 載入字型；若有隱私或離線需求，建議改為自託管字型

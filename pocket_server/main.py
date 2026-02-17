@@ -35,7 +35,9 @@ app.add_middleware(
 )
 
 BASE_DIR = Path(__file__).resolve().parent
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # 初始化 SQLite 資料庫，使用 sqlite_utils 方便操作 SQLite，資料庫檔案為 bookmarks.db
 db = Database("bookmarks.db")
@@ -100,7 +102,13 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
 
         id = item.id or str(uuid.uuid4())
         id = str(id)
-        created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        existing_rows_by_id = list(db["bookmarks"].rows_where("id = ?", [id]))
+        existing_created_at = (
+            existing_rows_by_id[0].get("created_at")
+            if existing_rows_by_id else None
+        )
+        created_at = existing_created_at or datetime.now(
+            timezone.utc).isoformat(timespec="seconds")
 
         # 將資料寫入 SQLite 資料庫（upsert by id）
         db["bookmarks"].upsert(
@@ -143,8 +151,11 @@ async def index_page():
 async def get_bookmarks():
     ensure_bookmarks_schema()
     rows = []
-    for row in db["bookmarks"].rows_where("1=1",
-                                          order_by="created_at desc, rowid desc"):
+    for row in db["bookmarks"].rows_where(
+            "1=1",
+            order_by=(
+                "COALESCE(created_at, '1970-01-01T00:00:00+00:00') "
+                "desc, rowid desc")):
         # tags 欄位可能是 JSON 字串，轉為逗號分隔字串
         tags = row.get("tags", "")
         if isinstance(tags, str):
