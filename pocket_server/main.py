@@ -121,73 +121,299 @@ async def sync_bookmarks(payload: List[BookmarkItem]):
 async def index_page():
     return """
     <!DOCTYPE html>
-    <html>
+    <html lang="zh-Hant">
     <head>
         <meta charset="utf-8" />
-        <title>Bookmarks Viewer</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Pocket-Like Bookmarks</title>
         <style>
-            body { font-family: sans-serif; margin: 2em; }
-            input { width: 300px; padding: 0.5em; margin-bottom: 1em; }
-            .bookmark { margin-bottom: 1.5em; padding-bottom: 1em; border-bottom: 1px solid #ccc; }
-            .url { font-size: 0.9em; color: gray; }
-            .tags { font-size: 0.9em; color: #007bff; }
-            button.tag {
-                background-color: #007bff;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                padding: 2px 6px;
-                margin: 0 2px 2px 0;
-                cursor: pointer;
-                font-size: 0.9em;
+            @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+
+            :root {
+                --bg: #f5f7fa;
+                --card: #ffffffcc;
+                --card-solid: #ffffff;
+                --text: #101827;
+                --muted: #506072;
+                --accent: #1266f1;
+                --accent-soft: #e9f0ff;
+                --line: #d6dfeb;
+                --ring: #9bc2ff;
+                --chip: #eef4ff;
+                --shadow: 0 14px 36px rgba(20, 38, 78, 0.08);
             }
+
+            * { box-sizing: border-box; }
+
+            body {
+                margin: 0;
+                color: var(--text);
+                font-family: 'Manrope', sans-serif;
+                background:
+                    radial-gradient(circle at 12% 8%, #d6e7ff 0%, transparent 35%),
+                    radial-gradient(circle at 88% 2%, #ffe8cd 0%, transparent 30%),
+                    var(--bg);
+                min-height: 100vh;
+            }
+
+            .shell {
+                width: min(1080px, 94vw);
+                margin: 28px auto 64px;
+            }
+
+            .hero {
+                background: linear-gradient(120deg, #ffffffdd, #f4f8ffdd);
+                border: 1px solid #ffffff;
+                box-shadow: var(--shadow);
+                border-radius: 24px;
+                padding: 28px;
+                backdrop-filter: blur(5px);
+            }
+
+            .title {
+                margin: 0 0 8px;
+                font-family: 'Space Grotesk', sans-serif;
+                font-size: clamp(26px, 4vw, 40px);
+                letter-spacing: -0.02em;
+            }
+
+            .subtitle {
+                margin: 0;
+                color: var(--muted);
+                font-size: 15px;
+            }
+
+            .search-wrap {
+                margin-top: 18px;
+                display: grid;
+                grid-template-columns: 1fr auto;
+                gap: 10px;
+            }
+
+            #searchInput {
+                width: 100%;
+                border: 1px solid var(--line);
+                border-radius: 14px;
+                background: var(--card-solid);
+                padding: 13px 14px;
+                font-size: 15px;
+                outline: none;
+                transition: border-color .18s ease, box-shadow .18s ease;
+            }
+
+            #searchInput:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 4px var(--ring);
+            }
+
+            .clear-btn {
+                border: 0;
+                border-radius: 14px;
+                background: var(--accent-soft);
+                color: var(--accent);
+                padding: 0 14px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+
+            .stats {
+                margin-top: 16px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .stat-chip {
+                background: var(--chip);
+                color: #21457f;
+                border-radius: 999px;
+                padding: 7px 12px;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            .grid {
+                margin-top: 20px;
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: 14px;
+            }
+
+            .bookmark {
+                background: var(--card);
+                border: 1px solid #ffffff;
+                box-shadow: var(--shadow);
+                border-radius: 18px;
+                padding: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                animation: rise .32s ease both;
+            }
+
+            .bookmark h3 {
+                margin: 0;
+                font-size: 18px;
+                line-height: 1.35;
+            }
+
+            .url a {
+                color: var(--accent);
+                text-decoration: none;
+                font-size: 13px;
+                word-break: break-all;
+            }
+
+            .url a:hover { text-decoration: underline; }
+
+            .excerpt {
+                margin: 0;
+                color: #34455a;
+                font-size: 14px;
+                line-height: 1.55;
+            }
+
+            .tags {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            button.tag {
+                background: #f3f8ff;
+                color: #31588f;
+                border: 1px solid #d7e6ff;
+                border-radius: 999px;
+                padding: 5px 10px;
+                cursor: pointer;
+                font-size: 12px;
+                font-weight: 700;
+                transition: transform .12s ease, background .12s ease;
+            }
+
             button.tag:hover {
-                background-color: #0056b3;
+                transform: translateY(-1px);
+                background: #e6f0ff;
+            }
+
+            .empty {
+                grid-column: 1 / -1;
+                text-align: center;
+                background: #ffffffb0;
+                border: 1px dashed #bfd0e8;
+                border-radius: 18px;
+                padding: 26px 20px;
+                color: var(--muted);
+                font-weight: 600;
+            }
+
+            @keyframes rise {
+                from { opacity: 0; transform: translateY(6px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            @media (max-width: 700px) {
+                .shell { margin-top: 16px; }
+                .hero { border-radius: 18px; padding: 18px; }
+                .search-wrap { grid-template-columns: 1fr; }
+                .clear-btn { padding: 10px; }
             }
         </style>
     </head>
     <body>
-        <h1>My Bookmarks</h1>
-        <input type="text" id="searchInput" placeholder="Search bookmarks..."/>
-        <div id="results"></div>
+        <main class="shell">
+            <section class="hero">
+                <h1 class="title">My Reading Vault</h1>
+                <p class="subtitle">收藏、搜尋、用標籤快速回到你最重要的內容。</p>
+
+                <div class="search-wrap">
+                    <input type="text" id="searchInput" placeholder="搜尋標題、摘要或標籤..." />
+                    <button class="clear-btn" id="clearBtn" type="button">清除</button>
+                </div>
+
+                <div class="stats">
+                    <span class="stat-chip" id="totalCount">共 0 筆</span>
+                    <span class="stat-chip" id="shownCount">顯示 0 筆</span>
+                </div>
+            </section>
+
+            <section class="grid" id="results"></section>
+        </main>
 
         <script>
             let bookmarks = [];
+            const searchInput = document.getElementById("searchInput");
+            const clearBtn = document.getElementById("clearBtn");
+            const totalCount = document.getElementById("totalCount");
+            const shownCount = document.getElementById("shownCount");
+            const results = document.getElementById("results");
+
+            function normalizeTags(rawTags) {
+                if (!rawTags) return [];
+                return String(rawTags)
+                    .split(',')
+                    .map(tag => tag.trim())
+                    .filter(Boolean);
+            }
+
+            function escapeHtml(str) {
+                return String(str || "")
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;")
+                    .replaceAll('"', "&quot;")
+                    .replaceAll("'", "&#39;");
+            }
 
             async function fetchBookmarks() {
                 const res = await fetch('/bookmarks');
                 bookmarks = await res.json();
-                render(bookmarks);
+                totalCount.textContent = `共 ${bookmarks.length} 筆`;
+                render();
             }
 
-            function render(list) {
-                const q = document.getElementById("searchInput").value.toLowerCase();
-                const filtered = list.filter(b =>
+            function render() {
+                const q = searchInput.value.toLowerCase();
+                const filtered = bookmarks.filter(b =>
                     b.title.toLowerCase().includes(q) ||
                     (b.excerpt || '').toLowerCase().includes(q) ||
                     (b.tags || '').toLowerCase().includes(q)
                 );
-                const results = document.getElementById("results");
-                results.innerHTML = filtered.map(b => {
-                    let tagsHtml = '';
-                    if (b.tags) {
-                        const tagsArray = b.tags.split(',').map(t => t.trim());
-                        tagsHtml = tagsArray.map(tag => 
-                            `<button class="tag" onclick="document.getElementById('searchInput').value='${tag}'; document.getElementById('searchInput').dispatchEvent(new Event('input'));">${tag}</button>`
-                        ).join('');
-                    }
+                shownCount.textContent = `顯示 ${filtered.length} 筆`;
+
+                if (!filtered.length) {
+                    results.innerHTML = '<div class="empty">沒有符合條件的書籤，試試別的關鍵字。</div>';
+                    return;
+                }
+
+                results.innerHTML = filtered.map((b, i) => {
+                    const tagsHtml = normalizeTags(b.tags)
+                        .map(tag => `<button class="tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`)
+                        .join('');
+
                     return `
-                    <div class="bookmark">
-                        <div><strong>${b.title}</strong></div>
-                        <div class="url"><a href="${b.url}" target="_blank" rel="noopener noreferrer">${b.url}</a></div>
-                        <div>${b.excerpt || ''}</div>
-                        <div class="tags">${tagsHtml}</div>
-                    </div>
+                        <article class="bookmark" style="animation-delay:${Math.min(i * 0.03, 0.4)}s">
+                            <h3>${escapeHtml(b.title || "Untitled")}</h3>
+                            <div class="url"><a href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(b.url)}</a></div>
+                            <p class="excerpt">${escapeHtml(b.excerpt || "沒有摘要")}</p>
+                            <div class="tags">${tagsHtml}</div>
+                        </article>
                     `;
                 }).join('');
+
+                results.querySelectorAll(".tag").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        searchInput.value = btn.dataset.tag || "";
+                        render();
+                    });
+                });
             }
 
-            document.getElementById("searchInput").addEventListener("input", () => render(bookmarks));
+            searchInput.addEventListener("input", render);
+            clearBtn.addEventListener("click", () => {
+                searchInput.value = "";
+                render();
+            });
             fetchBookmarks();
         </script>
     </body>
